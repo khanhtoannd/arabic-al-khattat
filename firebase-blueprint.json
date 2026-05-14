@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile that tracks total score and stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "lastActiveAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "Progress": {
+      "title": "Progress",
+      "description": "Tracks progress for an individual letter/word",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "itemId": { "type": "string", "description": "The phonetic or letter ID" },
+        "correctCount": { "type": "number" },
+        "attemptsCount": { "type": "number" },
+        "lastAttemptedAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["userId", "itemId", "correctCount", "attemptsCount", "lastAttemptedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles. Path variable {userId} must match the authenticated user's uid."
+    },
+    "users/{userId}/progress/{progressId}": {
+      "schema": { "$ref": "Progress" },
+      "description": "User progress for individual learning items."
+    }
+  }
+}

@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- Entity: User ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'createdAt'])
+        && data.uid is string && data.uid.size() <= 128 && data.uid == request.auth.uid
+        && data.createdAt is timestamp
+        // Optional fields
+        && (!('email' in data) || (data.email is string && data.email.size() <= 256))
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128))
+        && (!('lastActiveAt' in data) || data.lastActiveAt is timestamp);
+    }
+
+    // --- Entity: Progress ---
+    function isValidProgress(data, userId) {
+      return data.keys().hasAll(['userId', 'itemId', 'correctCount', 'attemptsCount', 'lastAttemptedAt'])
+        && data.userId is string && data.userId.size() <= 128 && data.userId == userId
+        && data.itemId is string && data.itemId.size() <= 128
+        && data.correctCount is number
+        && data.attemptsCount is number
+        && data.lastAttemptedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+                    && isValidId(userId)
+                    && isValidUser(incoming())
+                    && incoming().keys().size() <= 5
+                    && incoming().createdAt == request.time;
+      allow update: if isOwner(userId)
+                    && isValidId(userId)
+                    && isValidUser(incoming())
+                    && incoming().uid == existing().uid
+                    && incoming().createdAt == existing().createdAt
+                    // Only allowed to update displayName and lastActiveAt
+                    // (and maybe email if it changes, but typically it doesn't change from the client side like this)
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'lastActiveAt', 'email']);
+    }
+
+    match /users/{userId}/progress/{progressId} {
+      // Access is derived from the parent (user).
+      allow read: if isOwner(userId);
+      
+      allow create: if isOwner(userId)
+                    && isValidId(userId)
+                    && isValidId(progressId)
+                    && isValidProgress(incoming(), userId)
+                    && incoming().keys().size() == 5
+                    && incoming().lastAttemptedAt == request.time;
+                    
+      allow update: if isOwner(userId)
+                    && isValidId(userId)
+                    && isValidId(progressId)
+                    && isValidProgress(incoming(), userId)
+                    && incoming().userId == existing().userId
+                    && incoming().itemId == existing().itemId
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['correctCount', 'attemptsCount', 'lastAttemptedAt'])
+                    && incoming().lastAttemptedAt == request.time;
+    }
+  }
+}
